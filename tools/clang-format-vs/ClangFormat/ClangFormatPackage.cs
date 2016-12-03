@@ -340,12 +340,18 @@ namespace LLVM.ClangFormat
             string output = process.StandardOutput.ReadToEnd();
             // 5. clang-format is done, wait until it is fully shut down.
             process.WaitForExit();
-            if (process.ExitCode != 0)
+
+            // FIXME: If clang-format writes enough to the standard error stream to block,
+            // we will never reach this point; instead, read the standard error asynchronously.
+            string stdErr = process.StandardError.ReadToEnd();
+
+            if (process.ExitCode != 0 || stdErr.Length > 0)
             {
-                // FIXME: If clang-format writes enough to the standard error stream to block,
-                // we will never reach this point; instead, read the standard error asynchronously.
-                throw new Exception(process.StandardError.ReadToEnd());
+                throw new Exception(
+                    (stdErr.Length > 0 ? stdErr + "\n\n" : "") +
+                    "(Exit Code: " + process.ExitCode + ")");
             }
+
             return output;
         }
 
