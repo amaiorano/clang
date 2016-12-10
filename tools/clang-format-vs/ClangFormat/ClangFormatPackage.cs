@@ -12,6 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+//TODO
+// - Load extension on sln load (C++ projects only?)
+// - Look into whether we need to unregister/unload
+// - Only do format on save if .clang-format file (no fallback)
+
+
+using EnvDTE;
+using EnvDTE80;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -21,10 +30,12 @@ using Microsoft.VisualStudio.TextManager.Interop;
 using System;
 using System.Collections;
 using System.ComponentModel;
+using System.ComponentModel.Composition;
 using System.ComponentModel.Design;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
+using System.Linq;
 
 namespace LLVM.ClangFormat
 {
@@ -168,14 +179,21 @@ namespace LLVM.ClangFormat
     [PackageRegistration(UseManagedResourcesOnly = true)]
     [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)]
     [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideAutoLoad(UIContextGuids80.SolutionExists)] // Load package on solution load
     [Guid(GuidList.guidClangFormatPkgString)]
     [ProvideOptionPage(typeof(OptionPageGrid), "LLVM/Clang", "ClangFormat", 0, 0, true)]
     public sealed class ClangFormatPackage : Package
     {
         #region Package Members
+
+        RunningDocTableEventsDispatcher _runningDocTableEventsDispatcher;
+
         protected override void Initialize()
         {
             base.Initialize();
+
+            _runningDocTableEventsDispatcher = new RunningDocTableEventsDispatcher(this);
+            _runningDocTableEventsDispatcher.BeforeSave += OnBeforeSave;
 
             var commandService = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
             if (commandService != null)
@@ -213,12 +231,20 @@ namespace LLVM.ClangFormat
             }
         }
 
+        private void OnBeforeSave(object sender, Document document)
+        {
+            if (VsixUtils.IsDocumentDirty(document))
+            {
+                FormatDocument(document);
+            }
+        }
+
         /// <summary>
         /// Runs clang-format on the current selection
         /// </summary>
         private void FormatSelection()
         {
-            IWpfTextView view = GetCurrentView();
+            IWpfTextView view = VsixUtils.GetCurrentView();
             if (view == null)
                 // We're not in a text view.
                 return;
@@ -231,8 +257,8 @@ namespace LLVM.ClangFormat
             // of the file.
             if (start >= text.Length && text.Length > 0)
                 start = text.Length - 1;
-            string path = GetDocumentParent(view);
-            string filePath = GetDocumentPath(view);
+            string path = VsixUtils.GetDocumentParent(view);
+            string filePath = VsixUtils.GetDocumentPath(view);
 
             RunClangFormatAndApplyReplacements(text, start, length, path, filePath, view);
         }
@@ -242,12 +268,21 @@ namespace LLVM.ClangFormat
         /// </summary>
         private void FormatDocument()
         {
-            IWpfTextView view = GetCurrentView();
+            FormatView(VsixUtils.GetCurrentView());
+        }
+
+        private void FormatDocument(Document document)
+        {
+            FormatView(VsixUtils.GetDocumentView(document));
+        }
+
+        private void FormatView(IWpfTextView view)
+        {
             if (view == null)
                 // We're not in a text view.
                 return;
 
-            string filePath = GetDocumentPath(view);
+            string filePath = VsixUtils.GetDocumentPath(view);
             var path = Path.GetDirectoryName(filePath);
             string text = view.TextBuffer.CurrentSnapshot.GetText();
 
@@ -370,27 +405,7 @@ namespace LLVM.ClangFormat
             edit.Apply();
         }
 
-        /// <summary>
-        /// Returns the currently active view if it is a IWpfTextView.
-        /// </summary>
-        private IWpfTextView GetCurrentView()
-        {
-            // The SVsTextManager is a service through which we can get the active view.
-            var textManager = (IVsTextManager)Package.GetGlobalService(typeof(SVsTextManager));
-            IVsTextView textView;
-            textManager.GetActiveView(1, null, out textView);
-
-            // Now we have the active view as IVsTextView, but the text interfaces we need
-            // are in the IWpfTextView.
-            var userData = (IVsUserData)textView;
-            if (userData == null)
-                return null;
-            Guid guidWpfViewHost = DefGuidList.guidIWpfTextViewHost;
-            object host;
-            userData.GetData(ref guidWpfViewHost, out host);
-            return ((IWpfTextViewHost)host).TextView;
-        }
-
+ 
         private string GetStyle()
         {
             var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
@@ -414,25 +429,161 @@ namespace LLVM.ClangFormat
             var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
             return page.SortIncludes;
         }
+    }
 
-        private string GetDocumentParent(IWpfTextView view)
+
+
+    internal sealed class VsixUtils
+    {
+        /// <summary>
+        /// Returns the currently active view if it is a IWpfTextView.
+        /// </summary>
+        public static IWpfTextView GetCurrentView()
+        {
+            // The SVsTextManager is a service through which we can get the active view.
+            var textManager = (IVsTextManager)Package.GetGlobalService(typeof(SVsTextManager));
+            IVsTextView textView;
+            textManager.GetActiveView(1, null, out textView);
+
+            // Now we have the active view as IVsTextView, but the text interfaces we need
+            // are in the IWpfTextView.
+            return VsToWpfTextView(textView);
+        }
+
+        public static bool IsDocumentDirty(Document document)
+        {
+            var textView = GetDocumentView(document);
+            var textDocument = GetTextDocument(textView);
+            return textDocument?.IsDirty == true;
+        }
+
+        public static IWpfTextView GetDocumentView(Document document)
+        {
+            var textView = GetVsTextViewFrompPath(document.FullName);
+            return VsToWpfTextView(textView);
+        }
+
+        public static IWpfTextView VsToWpfTextView(IVsTextView textView)
+        {
+            var userData = (IVsUserData)textView;
+            if (userData == null)
+                return null;
+            Guid guidWpfViewHost = DefGuidList.guidIWpfTextViewHost;
+            object host;
+            userData.GetData(ref guidWpfViewHost, out host);
+            return ((IWpfTextViewHost)host).TextView;
+        }
+
+        public static IVsTextView GetVsTextViewFrompPath(string filePath)
+        {
+            // From http://stackoverflow.com/a/2427368/4039972
+            var dte2 = (EnvDTE80.DTE2)Package.GetGlobalService(typeof(SDTE));
+            var sp = (Microsoft.VisualStudio.OLE.Interop.IServiceProvider)dte2;
+            var serviceProvider = new Microsoft.VisualStudio.Shell.ServiceProvider(sp);
+
+            IVsUIHierarchy uiHierarchy;
+            uint itemID;
+            IVsWindowFrame windowFrame;
+            if (VsShellUtilities.IsDocumentOpen(serviceProvider, filePath, Guid.Empty,
+                out uiHierarchy, out itemID, out windowFrame))
+            {
+                // Get the IVsTextView from the windowFrame.
+                return VsShellUtilities.GetTextView(windowFrame);
+            }
+            return null;
+        }
+
+        public static ITextDocument GetTextDocument(IWpfTextView view)
         {
             ITextDocument document;
-            if (view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
+            if (view != null && view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
+                return document;
+            return null;
+        }
+
+        public static string GetDocumentParent(IWpfTextView view)
+        {
+            ITextDocument document = GetTextDocument(view);
+            if (document != null)
             {
                 return Directory.GetParent(document.FilePath).ToString();
             }
             return null;
         }
 
-        private string GetDocumentPath(IWpfTextView view)
+        public static string GetDocumentPath(IWpfTextView view)
         {
-            ITextDocument document;
-            if (view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
+            return GetTextDocument(view)?.FilePath;
+        }        
+    }
+
+    internal sealed class RunningDocTableEventsDispatcher : IVsRunningDocTableEvents3
+    {
+        public delegate void OnBeforeSaveHander(object sender, Document document);
+        public event OnBeforeSaveHander BeforeSave;
+
+        private RunningDocumentTable _runningDocumentTable;
+        private DTE _dte;
+        public RunningDocTableEventsDispatcher(Package package)
+        {
+            _runningDocumentTable = new RunningDocumentTable(package);
+            _runningDocumentTable.Advise(this);
+
+            _dte = (DTE)Package.GetGlobalService(typeof(DTE));
+        }
+
+        public int OnAfterAttributeChange(uint docCookie, uint grfAttribs)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnAfterAttributeChangeEx(uint docCookie, uint grfAttribs, IVsHierarchy pHierOld, uint itemidOld, string pszMkDocumentOld, IVsHierarchy pHierNew, uint itemidNew, string pszMkDocumentNew)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnAfterDocumentWindowHide(uint docCookie, IVsWindowFrame pFrame)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnAfterFirstDocumentLock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnAfterSave(uint docCookie)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnBeforeDocumentWindowShow(uint docCookie, int fFirstShow, IVsWindowFrame pFrame)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnBeforeLastDocumentUnlock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
+        {
+            return VSConstants.S_OK;
+        }
+
+        public int OnBeforeSave(uint docCookie)
+        {
+            if (BeforeSave != null)
             {
-                return document.FilePath;
+                var document = FindDocumentByCookie(docCookie);
+                if (document != null) // Not sure why this happens sometimes
+                {
+                    BeforeSave(this, FindDocumentByCookie(docCookie));
+                }
             }
-            return null;
+            return VSConstants.S_OK;
+        }
+
+        private Document FindDocumentByCookie(uint docCookie)
+        {
+            var documentInfo = _runningDocumentTable.GetDocumentInfo(docCookie);
+            return _dte.Documents.Cast<Document>().FirstOrDefault(doc => doc.FullName == documentInfo.Moniker);
         }
     }
 }
