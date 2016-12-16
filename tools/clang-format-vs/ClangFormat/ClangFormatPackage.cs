@@ -19,7 +19,6 @@
 
 
 using EnvDTE;
-using EnvDTE80;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
@@ -30,7 +29,6 @@ using Microsoft.VisualStudio.TextManager.Interop;
 using System;
 using System.Collections;
 using System.ComponentModel;
-using System.ComponentModel.Composition;
 using System.ComponentModel.Design;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -222,11 +220,11 @@ namespace LLVM.ClangFormat
             switch (mc.CommandID.ID)
             {
                 case (int)PkgCmdIDList.cmdidClangFormatSelection:
-                    FormatSelection();
+                    FormatSelection(GetUserOptions());
                     break;
 
                 case (int)PkgCmdIDList.cmdidClangFormatDocument:
-                    FormatDocument();
+                    FormatDocument(GetUserOptions());
                     break;
             }
         }
@@ -235,14 +233,16 @@ namespace LLVM.ClangFormat
         {
             if (VsixUtils.IsDocumentDirty(document))
             {
-                FormatDocument(document);
+                var options = GetUserOptions();
+                options.fallbackStyle = "none";
+                FormatDocument(document, options);
             }
         }
 
         /// <summary>
         /// Runs clang-format on the current selection
         /// </summary>
-        private void FormatSelection()
+        private void FormatSelection(ClangFormatOptions options)
         {
             IWpfTextView view = VsixUtils.GetCurrentView();
             if (view == null)
@@ -260,23 +260,23 @@ namespace LLVM.ClangFormat
             string path = VsixUtils.GetDocumentParent(view);
             string filePath = VsixUtils.GetDocumentPath(view);
 
-            RunClangFormatAndApplyReplacements(text, start, length, path, filePath, view);
+            RunClangFormatAndApplyReplacements(text, start, length, path, filePath, options, view);
         }
 
         /// <summary>
         /// Runs clang-format on the current document
         /// </summary>
-        private void FormatDocument()
+        private void FormatDocument(ClangFormatOptions options)
         {
-            FormatView(VsixUtils.GetCurrentView());
+            FormatView(VsixUtils.GetCurrentView(), options);
         }
 
-        private void FormatDocument(Document document)
+        private void FormatDocument(Document document, ClangFormatOptions options)
         {
-            FormatView(VsixUtils.GetDocumentView(document));
+            FormatView(VsixUtils.GetDocumentView(document), options);
         }
 
-        private void FormatView(IWpfTextView view)
+        private void FormatView(IWpfTextView view, ClangFormatOptions options)
         {
             if (view == null)
                 // We're not in a text view.
@@ -286,14 +286,14 @@ namespace LLVM.ClangFormat
             var path = Path.GetDirectoryName(filePath);
             string text = view.TextBuffer.CurrentSnapshot.GetText();
 
-            RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, view);
+            RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, options, view);
         }
 
-        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, IWpfTextView view)
+        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, ClangFormatOptions options, IWpfTextView view)
         {
             try
             {
-                string replacements = RunClangFormat(text, offset, length, path, filePath);
+                string replacements = RunClangFormat(text, offset, length, path, filePath, options);
                 ApplyClangFormatReplacements(replacements, view);
             }
             catch (Exception e)
@@ -313,12 +313,31 @@ namespace LLVM.ClangFormat
             }
         }
 
+        struct ClangFormatOptions
+        {
+            public string style;
+            public string fallbackStyle;
+            public bool sortIncludes;
+            public string assumeFilename;
+        }
+
+        ClangFormatOptions GetUserOptions()
+        {
+            return new ClangFormatOptions
+            {
+                style = GetStyle(),
+                fallbackStyle = GetFallbackStyle(),
+                sortIncludes = GetSortIncludes(),
+                assumeFilename = GetAssumeFilename()
+            };
+        }
+
         /// <summary>
         /// Runs the given text through clang-format and returns the replacements as XML.
         /// 
         /// Formats the text range starting at offset of the given length.
         /// </summary>
-        private string RunClangFormat(string text, int offset, int length, string path, string filePath)
+        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, ClangFormatOptions options)
         {
             string vsixPath = Path.GetDirectoryName(
                 typeof(ClangFormatPackage).Assembly.Location);
@@ -328,16 +347,16 @@ namespace LLVM.ClangFormat
             process.StartInfo.FileName = vsixPath + "\\clang-format.exe";
             // Poor man's escaping - this will not work when quotes are already escaped
             // in the input (but we don't need more).
-            string style = GetStyle().Replace("\"", "\\\"");
-            string fallbackStyle = GetFallbackStyle().Replace("\"", "\\\"");
+            string style = options.style.Replace("\"", "\\\"");
+            string fallbackStyle = options.fallbackStyle.Replace("\"", "\\\"");
             process.StartInfo.Arguments = " -offset " + offset +
                                           " -length " + length +
                                           " -output-replacements-xml " +
                                           " -style \"" + style + "\"" +
                                           " -fallback-style \"" + fallbackStyle + "\"";
-            if (GetSortIncludes())
+            if (options.sortIncludes)
               process.StartInfo.Arguments += " -sort-includes ";
-            string assumeFilename = GetAssumeFilename();
+            string assumeFilename = options.assumeFilename;
             if (string.IsNullOrEmpty(assumeFilename))
                 assumeFilename = filePath;
             if (!string.IsNullOrEmpty(assumeFilename))
@@ -387,7 +406,7 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Applies the clang-format replacements (xml) to the current view
         /// </summary>
-        private void ApplyClangFormatReplacements(string replacements, IWpfTextView view)
+        private static void ApplyClangFormatReplacements(string replacements, IWpfTextView view)
         {
             // clang-format returns no replacements if input text is empty
             if (replacements.Length == 0)
