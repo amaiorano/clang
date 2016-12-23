@@ -249,8 +249,14 @@ static bool format(StringRef FileName) {
   if (fillRanges(Code.get(), Ranges))
     return true;
   StringRef AssumedFileName = (FileName == "-") ? AssumeFileName : FileName;
-  FormatStyle FormatStyle =
+
+  llvm::Expected<FormatStyle> FormatStyleOrError =
       getStyle(Style, AssumedFileName, FallbackStyle, Code->getBuffer());
+  if (!FormatStyleOrError) {
+    llvm::errs() << llvm::toString(FormatStyleOrError.takeError()) << "\n";
+    return true;
+  }
+  FormatStyle FormatStyle = *FormatStyleOrError;
   if (SortIncludes.getNumOccurrences() != 0)
     FormatStyle.SortIncludes = SortIncludes;
   unsigned CursorPosition = Cursor;
@@ -334,10 +340,16 @@ int main(int argc, const char **argv) {
     cl::PrintHelpMessage();
 
   if (DumpConfig) {
-    std::string Config =
-        clang::format::configurationAsText(clang::format::getStyle(
+    llvm::Expected<clang::format::FormatStyle> FormatStyleOrError =
+        clang::format::getStyle(
             Style, FileNames.empty() ? AssumeFileName : FileNames[0],
-            FallbackStyle));
+            FallbackStyle);
+    if (!FormatStyleOrError) {
+      llvm::errs() << llvm::toString(FormatStyleOrError.takeError()) << "\n";
+      return 1;
+	  }
+    std::string Config =
+        clang::format::configurationAsText(*FormatStyleOrError);
     outs() << Config << "\n";
     return 0;
   }

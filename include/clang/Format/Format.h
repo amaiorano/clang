@@ -861,9 +861,10 @@ extern const char *StyleOptionHelpDescription;
 ///
 /// \returns FormatStyle as specified by ``StyleName``. If no style could be
 /// determined, the default is LLVM Style (see ``getLLVMStyle()``).
-FormatStyle getStyle(StringRef StyleName, StringRef FileName,
-                     StringRef FallbackStyle, StringRef Code = "",
-                     vfs::FileSystem *FS = nullptr);
+llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
+                                     StringRef FallbackStyle,
+                                     StringRef Code = "",
+                                     vfs::FileSystem *FS = nullptr);
 
 // \brief Returns a string representation of ``Language``.
 inline StringRef getLanguageName(FormatStyle::LanguageKind Language) {

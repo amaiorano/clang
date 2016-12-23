@@ -10975,13 +10975,15 @@ TEST(FormatStyle, GetStyleOfFile) {
   ASSERT_TRUE(
       FS.addFile("/a/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
   auto Style1 = getStyle("file", "/a/.clang-format", "Google", "", &FS);
-  ASSERT_EQ(Style1, getLLVMStyle());
+  ASSERT_TRUE((bool)Style1);
+  ASSERT_EQ(*Style1, getLLVMStyle());
 
   // Test 2: fallback to default.
   ASSERT_TRUE(
       FS.addFile("/b/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
   auto Style2 = getStyle("file", "/b/test.cpp", "Mozilla", "", &FS);
-  ASSERT_EQ(Style2, getMozillaStyle());
+  ASSERT_TRUE((bool)Style2);
+  ASSERT_EQ(*Style2, getMozillaStyle());
 
   // Test 3: format file in parent directory.
   ASSERT_TRUE(
@@ -10990,7 +10992,41 @@ TEST(FormatStyle, GetStyleOfFile) {
   ASSERT_TRUE(FS.addFile("/c/sub/sub/sub/test.cpp", 0,
                          llvm::MemoryBuffer::getMemBuffer("int i;")));
   auto Style3 = getStyle("file", "/c/sub/sub/sub/test.cpp", "LLVM", "", &FS);
-  ASSERT_EQ(Style3, getGoogleStyle());
+  ASSERT_TRUE((bool)Style3);
+  ASSERT_EQ(*Style3, getGoogleStyle());
+
+  // Test 4: error on invalid fallback style
+  auto Style4 = getStyle("file", "a.h", "KungFu", "", &FS);
+  ASSERT_FALSE((bool)Style4);
+  auto ErrorMsg4 = llvm::toString(Style4.takeError());
+  ASSERT_GT(ErrorMsg4.length(), 0);
+
+  // Test 5: error on invalid yaml on command line
+  auto Style5 = getStyle("{invalid_key=invalid_value}", "a.h", "LLVM", "", &FS);
+  ASSERT_FALSE((bool)Style5);
+  auto ErrorMsg5 = llvm::toString(Style5.takeError());
+  ASSERT_GT(ErrorMsg5.length(), 0);
+
+  // Test 6: error on invalid style
+  auto Style6 = getStyle("KungFu", "a.h", "LLVM", "", &FS);
+  ASSERT_FALSE((bool)Style6);
+  auto ErrorMsg6 = llvm::toString(Style6.takeError());
+  ASSERT_GT(ErrorMsg6.length(), 0);
+
+  // Test 7: found config file, error on fail to open
+  // TODO: not sure how to test this
+
+  // Test 8: found config file, error on parsing it
+  ASSERT_TRUE(
+      FS.addFile("/d/.clang-format", 0,
+                 llvm::MemoryBuffer::getMemBuffer("BasedOnStyle: LLVM\n"
+                                                  "InvalidKey: InvalidValue")));
+  ASSERT_TRUE(
+      FS.addFile("/d/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
+  auto Style8 = getStyle("file", "/d/.clang-format", "LLVM", "", &FS);
+  ASSERT_FALSE((bool)Style8);
+  auto ErrorMsg8 = llvm::toString(Style8.takeError());
+  ASSERT_GT(ErrorMsg8.length(), 0);
 }
 
 TEST_F(ReplacementTest, FormatCodeAfterReplacements) {

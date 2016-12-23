@@ -83,7 +83,13 @@ bool formatAndApplyAllReplacements(
     FileID ID = SM.getOrCreateFileID(Entry, SrcMgr::C_User);
     StringRef Code = SM.getBufferData(ID);
 
-    format::FormatStyle CurStyle = format::getStyle(Style, FilePath, "LLVM");
+	llvm::Expected<format::FormatStyle> FormatStyleOrError = format::getStyle(Style, FilePath, "LLVM");
+	if (!FormatStyleOrError) {
+		llvm::errs() << llvm::toString(FormatStyleOrError.takeError()) << "\n";
+		return false;
+	}
+	const format::FormatStyle CurStyle = *FormatStyleOrError;
+
     auto NewReplacements =
         format::formatReplacements(Code, CurReplaces, CurStyle);
     if (!NewReplacements) {

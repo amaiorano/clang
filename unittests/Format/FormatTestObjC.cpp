@@ -69,15 +69,15 @@ protected:
 };
 
 TEST_F(FormatTestObjC, DetectsObjCInHeaders) {
-  Style = getStyle("LLVM", "a.h", "none", "@interface\n"
+  Style = *getStyle("LLVM", "a.h", "none", "@interface\n"
                                           "- (id)init;");
   EXPECT_EQ(FormatStyle::LK_ObjC, Style.Language);
-  Style = getStyle("LLVM", "a.h", "none", "@interface\n"
+  Style = *getStyle("LLVM", "a.h", "none", "@interface\n"
                                           "+ (id)init;");
   EXPECT_EQ(FormatStyle::LK_ObjC, Style.Language);
 
   // No recognizable ObjC.
-  Style = getStyle("LLVM", "a.h", "none", "void f() {}");
+  Style = *getStyle("LLVM", "a.h", "none", "void f() {}");
   EXPECT_EQ(FormatStyle::LK_Cpp, Style.Language);
 }
 
