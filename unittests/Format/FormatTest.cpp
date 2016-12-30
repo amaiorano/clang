@@ -11013,20 +11013,17 @@ TEST(FormatStyle, GetStyleOfFile) {
   auto ErrorMsg6 = llvm::toString(Style6.takeError());
   ASSERT_GT(ErrorMsg6.length(), 0);
 
-  // Test 7: found config file, error on fail to open
-  // TODO: not sure how to test this
-
-  // Test 8: found config file, error on parsing it
+  // Test 7: found config file, error on parsing it
   ASSERT_TRUE(
       FS.addFile("/d/.clang-format", 0,
                  llvm::MemoryBuffer::getMemBuffer("BasedOnStyle: LLVM\n"
                                                   "InvalidKey: InvalidValue")));
   ASSERT_TRUE(
       FS.addFile("/d/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
-  auto Style8 = getStyle("file", "/d/.clang-format", "LLVM", "", &FS);
-  ASSERT_FALSE((bool)Style8);
-  auto ErrorMsg8 = llvm::toString(Style8.takeError());
-  ASSERT_GT(ErrorMsg8.length(), 0);
+  auto Style7 = getStyle("file", "/d/.clang-format", "LLVM", "", &FS);
+  ASSERT_FALSE((bool)Style7);
+  auto ErrorMsg7 = llvm::toString(Style7.takeError());
+  ASSERT_GT(ErrorMsg7.length(), 0);
 }
 
 TEST_F(ReplacementTest, FormatCodeAfterReplacements) {

@@ -421,8 +421,8 @@ std::error_code make_error_code(ParseError e) {
   return std::error_code(static_cast<int>(e), getParseCategory());
 }
 
-template <typename... ArgTs> llvm::Error make_string_error(ArgTs &&... Args) {
-  return llvm::make_error<llvm::StringError>(std::forward<ArgTs>(Args)...,
+llvm::Error make_string_error(const llvm::Twine &Message) {
+  return llvm::make_error<llvm::StringError>(Message,
                                              llvm::inconvertibleErrorCode());
 }
 
@@ -1893,45 +1893,39 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
   if (!FS) {
     FS = vfs::getRealFileSystem().get();
   }
-  FormatStyle::LanguageKind Language = getLanguageByFileName(FileName);
+  FormatStyle Style = getNoStyle();
+  Style.Language = getLanguageByFileName(FileName);
 
   // This is a very crude detection of whether a header contains ObjC code that
   // should be improved over time and probably be done on tokens, not one the
   // bare content of the file.
-  if (Language == FormatStyle::LK_Cpp && FileName.endswith(".h") &&
+  if (Style.Language == FormatStyle::LK_Cpp && FileName.endswith(".h") &&
       (Code.contains("\n- (") || Code.contains("\n+ (")))
-    Language = FormatStyle::LK_ObjC;
+    Style.Language = FormatStyle::LK_ObjC;
 
   FormatStyle FallbackStyle = getNoStyle();
-  if (!getPredefinedStyle(FallbackStyleName, Language, &FallbackStyle)) {
+  if (!getPredefinedStyle(FallbackStyleName, Style.Language, &FallbackStyle))
     return make_string_error("Invalid fallback style \"" +
                              FallbackStyleName.str());
-  }
 
   if (StyleName.startswith("{")) {
     // Parse YAML/JSON style from the command line.
-    FormatStyle Style;
-    if (std::error_code ec = parseConfiguration(StyleName, &Style)) {
+    if (std::error_code ec = parseConfiguration(StyleName, &Style))
       return make_string_error("Error parsing -style: " + ec.message());
-    }
-	Style.Language = Language;
     return Style;
   }
 
   if (!StyleName.equals_lower("file")) {
-    FormatStyle Style;
     if (!getPredefinedStyle(StyleName, Style.Language, &Style))
       return make_string_error("Invalid value for -style");
-	Style.Language = Language;
-	return Style;
+    return Style;
   }
 
   // Look for .clang-format/_clang-format file in the file's parent directories.
   SmallString<128> UnsuitableConfigFiles;
   SmallString<128> Path(FileName);
-  if (std::error_code EC = FS->makeAbsolute(Path)) {
+  if (std::error_code EC = FS->makeAbsolute(Path))
     return make_string_error(EC.message());
-  }
 
   for (StringRef Directory = Path; !Directory.empty();
        Directory = llvm::sys::path::parent_path(Directory)) {
@@ -1966,7 +1960,6 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
       if (std::error_code EC = Text.getError()) {
         return make_string_error(EC.message());
       }
-      FormatStyle Style;
       if (std::error_code ec =
               parseConfiguration(Text.get()->getBuffer(), &Style)) {
         if (ec == ParseError::Unsuitable) {
@@ -1979,16 +1972,12 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
                                  ec.message());
       }
       DEBUG(llvm::dbgs() << "Using configuration file " << ConfigFile << "\n");
-	  Style.Language = Language;
-	  return Style;
+      return Style;
     }
   }
   if (!UnsuitableConfigFiles.empty()) {
-    // TODO: If we find an unsuitable file for this language, are we expected to
-    // use the fallback style?
-    // If so, can't return this error here...
     return make_string_error("Configuration file(s) do(es) not support " +
-                             getLanguageName(Language) + ": " +
+                             getLanguageName(Style.Language) + ": " +
                              UnsuitableConfigFiles);
   }
 
