@@ -13,10 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 //TODO
-// - Load extension on sln load (C++ projects only?)
-// - Look into whether we need to unregister/unload
+// DONE - Load extension on sln load
+// DONE - Look into whether we need to unregister/unload
 // - Only do format on save if .clang-format file (no fallback)
-
+// - Option for OnSave: Format Document (modified only)
+// - Format modified lines (+ OnSave)
 
 using EnvDTE;
 using Microsoft.VisualStudio;
@@ -37,6 +38,13 @@ using System.Linq;
 
 namespace LLVM.ClangFormat
 {
+    public enum FormatOnSaveTypes
+    {
+        Disabled,
+        AllDocuments,
+        CurrentDocument
+    }
+
     [ClassInterface(ClassInterfaceType.AutoDual)]
     [CLSCompliant(false), ComVisible(true)]
     public class OptionPageGrid : DialogPage
@@ -45,6 +53,7 @@ namespace LLVM.ClangFormat
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
         private string style = "file";
+        private FormatOnSaveTypes formatOnSaveTypes = FormatOnSaveTypes.Disabled;
 
         public class StyleConverter : TypeConverter
         {
@@ -172,6 +181,21 @@ namespace LLVM.ClangFormat
             get { return sortIncludes; }
             set { sortIncludes = value; }
         }
+
+        [Category("LLVM/Clang")]
+        [DisplayName("Format on Save")]
+        [Description("Runs clang-format upon saving.\n" +
+                     "Will only format if Style is found (ignores Fallback Style)\n" +
+                     "\n" +
+                     "Possible values:\n" +
+                     "- Disabled: feature is disabled\n" +
+                     "- AllDocuments: format all modified documents\n" +
+                     "- CurrentDocument: format current document, if modified")]
+        public FormatOnSaveTypes FormatOnSave
+        {
+            get { return formatOnSaveTypes; }
+            set { formatOnSaveTypes = value; }
+        }
     }
 
     [PackageRegistration(UseManagedResourcesOnly = true)]
@@ -231,6 +255,25 @@ namespace LLVM.ClangFormat
 
         private void OnBeforeSave(object sender, Document document)
         {
+            switch (GetUserOptions().formatOnSave)
+            {
+                case FormatOnSaveTypes.Disabled:
+                    return;
+
+                case FormatOnSaveTypes.CurrentDocument:
+                    IWpfTextView view = VsixUtils.GetCurrentView();
+                    if (view == null)
+                        // We're not in a text view.
+                        return;
+                    if (VsixUtils.GetDocumentView(document) != view)
+                        // Not the current document
+                        return;
+                    break;
+
+                case FormatOnSaveTypes.AllDocuments:
+                    break;
+            }
+
             if (VsixUtils.IsDocumentDirty(document))
             {
                 var options = GetUserOptions();
@@ -319,16 +362,20 @@ namespace LLVM.ClangFormat
             public string fallbackStyle;
             public bool sortIncludes;
             public string assumeFilename;
+            public FormatOnSaveTypes formatOnSave;
         }
 
         ClangFormatOptions GetUserOptions()
         {
+            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+
             return new ClangFormatOptions
             {
-                style = GetStyle(),
-                fallbackStyle = GetFallbackStyle(),
-                sortIncludes = GetSortIncludes(),
-                assumeFilename = GetAssumeFilename()
+                style = page.Style,
+                fallbackStyle = page.FallbackStyle,
+                sortIncludes = page.SortIncludes,
+                assumeFilename = page.AssumeFilename,
+                formatOnSave = page.FormatOnSave
             };
         }
 
@@ -425,29 +472,29 @@ namespace LLVM.ClangFormat
         }
 
  
-        private string GetStyle()
-        {
-            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-            return page.Style;
-        }
+        //private string GetStyle()
+        //{
+        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+        //    return page.Style;
+        //}
 
-        private string GetAssumeFilename()
-        {
-            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-            return page.AssumeFilename;
-        }
+        //private string GetAssumeFilename()
+        //{
+        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+        //    return page.AssumeFilename;
+        //}
 
-        private string GetFallbackStyle()
-        {
-            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-            return page.FallbackStyle;
-        }
+        //private string GetFallbackStyle()
+        //{
+        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+        //    return page.FallbackStyle;
+        //}
 
-        private bool GetSortIncludes()
-        {
-            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-            return page.SortIncludes;
-        }
+        //private bool GetSortIncludes()
+        //{
+        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+        //    return page.SortIncludes;
+        //}
     }
 
 
