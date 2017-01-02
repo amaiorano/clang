@@ -1888,12 +1888,12 @@ static FormatStyle::LanguageKind getLanguageByFileName(StringRef FileName) {
 }
 
 llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
-                                     StringRef FallbackStyleName,
-                                     StringRef Code, vfs::FileSystem *FS) {
+                                     StringRef FallbackStyle, StringRef Code,
+                                     vfs::FileSystem *FS) {
   if (!FS) {
     FS = vfs::getRealFileSystem().get();
   }
-  FormatStyle Style = getNoStyle();
+  FormatStyle Style = getLLVMStyle();
   Style.Language = getLanguageByFileName(FileName);
 
   // This is a very crude detection of whether a header contains ObjC code that
@@ -1903,10 +1903,11 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
       (Code.contains("\n- (") || Code.contains("\n+ (")))
     Style.Language = FormatStyle::LK_ObjC;
 
-  FormatStyle FallbackStyle = getNoStyle();
-  if (!getPredefinedStyle(FallbackStyleName, Style.Language, &FallbackStyle))
-    return make_string_error("Invalid fallback style \"" +
-                             FallbackStyleName.str());
+  // FIXME: If FallbackStyle is explicitly "none", this effectively disables
+  // replacements. Fix this by setting a separate FormatStyle variable and
+  // returning it when we mean to return the fallback style explicitly.
+  if (!getPredefinedStyle(FallbackStyle, Style.Language, &Style))
+    return make_string_error("Invalid fallback style \"" + FallbackStyle.str());
 
   if (StyleName.startswith("{")) {
     // Parse YAML/JSON style from the command line.
@@ -1980,9 +1981,7 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
                              getLanguageName(Style.Language) + ": " +
                              UnsuitableConfigFiles);
   }
-
-  // No config file found, return the fallback style, which may be no style
-  return FallbackStyle;
+  return Style;
 }
 
 } // namespace format
