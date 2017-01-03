@@ -421,7 +421,7 @@ std::error_code make_error_code(ParseError e) {
   return std::error_code(static_cast<int>(e), getParseCategory());
 }
 
-llvm::Error make_string_error(const llvm::Twine &Message) {
+inline llvm::Error make_string_error(const llvm::Twine &Message) {
   return llvm::make_error<llvm::StringError>(Message,
                                              llvm::inconvertibleErrorCode());
 }
@@ -1903,9 +1903,7 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
       (Code.contains("\n- (") || Code.contains("\n+ (")))
     Style.Language = FormatStyle::LK_ObjC;
 
-  // FIXME: If FallbackStyle is explicitly "none", this effectively disables
-  // replacements. Fix this by setting a separate FormatStyle variable and
-  // returning it when we mean to return the fallback style explicitly.
+  // FIXME: If FallbackStyle is explicitly "none", replacements are disabled.
   if (!getPredefinedStyle(FallbackStyle, Style.Language, &Style))
     return make_string_error("Invalid fallback style \"" + FallbackStyle.str());
 
@@ -1958,9 +1956,8 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
     if (FoundConfigFile) {
       llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Text =
           FS->getBufferForFile(ConfigFile.str());
-      if (std::error_code EC = Text.getError()) {
+      if (std::error_code EC = Text.getError())
         return make_string_error(EC.message());
-      }
       if (std::error_code ec =
               parseConfiguration(Text.get()->getBuffer(), &Style)) {
         if (ec == ParseError::Unsuitable) {
@@ -1976,11 +1973,10 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
       return Style;
     }
   }
-  if (!UnsuitableConfigFiles.empty()) {
+  if (!UnsuitableConfigFiles.empty())
     return make_string_error("Configuration file(s) do(es) not support " +
                              getLanguageName(Style.Language) + ": " +
                              UnsuitableConfigFiles);
-  }
   return Style;
 }
 

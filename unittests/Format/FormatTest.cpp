@@ -10998,20 +10998,17 @@ TEST(FormatStyle, GetStyleOfFile) {
   // Test 4: error on invalid fallback style
   auto Style4 = getStyle("file", "a.h", "KungFu", "", &FS);
   ASSERT_FALSE((bool)Style4);
-  auto ErrorMsg4 = llvm::toString(Style4.takeError());
-  ASSERT_GT(ErrorMsg4.length(), 0);
+  llvm::consumeError(Style4.takeError());
 
   // Test 5: error on invalid yaml on command line
   auto Style5 = getStyle("{invalid_key=invalid_value}", "a.h", "LLVM", "", &FS);
   ASSERT_FALSE((bool)Style5);
-  auto ErrorMsg5 = llvm::toString(Style5.takeError());
-  ASSERT_GT(ErrorMsg5.length(), 0);
+  llvm::consumeError(Style5.takeError());
 
   // Test 6: error on invalid style
   auto Style6 = getStyle("KungFu", "a.h", "LLVM", "", &FS);
   ASSERT_FALSE((bool)Style6);
-  auto ErrorMsg6 = llvm::toString(Style6.takeError());
-  ASSERT_GT(ErrorMsg6.length(), 0);
+  llvm::consumeError(Style6.takeError());
 
   // Test 7: found config file, error on parsing it
   ASSERT_TRUE(
@@ -11022,8 +11019,7 @@ TEST(FormatStyle, GetStyleOfFile) {
       FS.addFile("/d/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
   auto Style7 = getStyle("file", "/d/.clang-format", "LLVM", "", &FS);
   ASSERT_FALSE((bool)Style7);
-  auto ErrorMsg7 = llvm::toString(Style7.takeError());
-  ASSERT_GT(ErrorMsg7.length(), 0);
+  llvm::consumeError(Style7.takeError());
 }
 
 TEST_F(ReplacementTest, FormatCodeAfterReplacements) {
