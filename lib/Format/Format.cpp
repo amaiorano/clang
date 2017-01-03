@@ -1903,7 +1903,7 @@ llvm::Expected<FormatStyle> getStyle(StringRef StyleName, StringRef FileName,
       (Code.contains("\n- (") || Code.contains("\n+ (")))
     Style.Language = FormatStyle::LK_ObjC;
 
-  // FIXME: If FallbackStyle is explicitly "none", replacements are disabled.
+  // FIXME: If FallbackStyle is explicitly "none", format is disabled.
   if (!getPredefinedStyle(FallbackStyle, Style.Language, &Style))
     return make_string_error("Invalid fallback style \"" + FallbackStyle.str());
 

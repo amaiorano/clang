@@ -68,21 +68,21 @@ protected:
   FormatStyle Style;
 };
 
-TEST_F(FormatTestObjC, DetectsObjCInHeaders) {
-  auto Style1 = getStyle("LLVM", "a.h", "none", "@interface\n"
+TEST(FormatTestObjCStyle, DetectsObjCInHeaders) {
+  auto Style = getStyle("LLVM", "a.h", "none", "@interface\n"
                                                "- (id)init;");
-  ASSERT_TRUE((bool)Style1);
-  EXPECT_EQ(FormatStyle::LK_ObjC, Style1->Language);
+  ASSERT_TRUE((bool)Style);
+  EXPECT_EQ(FormatStyle::LK_ObjC, Style->Language);
 
-  auto Style2 = getStyle("LLVM", "a.h", "none", "@interface\n"
+  Style = getStyle("LLVM", "a.h", "none", "@interface\n"
                                           "+ (id)init;");
-  ASSERT_TRUE((bool)Style2);
-  EXPECT_EQ(FormatStyle::LK_ObjC, Style2->Language);
+  ASSERT_TRUE((bool)Style);
+  EXPECT_EQ(FormatStyle::LK_ObjC, Style->Language);
 
   // No recognizable ObjC.
-  auto Style3 = getStyle("LLVM", "a.h", "none", "void f() {}");
-  ASSERT_TRUE((bool)Style3);
-  EXPECT_EQ(FormatStyle::LK_Cpp, Style3->Language);
+  Style = getStyle("LLVM", "a.h", "none", "void f() {}");
+  ASSERT_TRUE((bool)Style);
+  EXPECT_EQ(FormatStyle::LK_Cpp, Style->Language);
 }
 
 TEST_F(FormatTestObjC, FormatObjCTryCatch) {
