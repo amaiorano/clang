@@ -10978,12 +10978,17 @@ TEST(FormatStyle, GetStyleOfFile) {
   ASSERT_TRUE((bool)Style1);
   ASSERT_EQ(*Style1, getLLVMStyle());
 
-  // Test 2: fallback to default.
+  // Test 2.1: fallback to default.
   ASSERT_TRUE(
       FS.addFile("/b/test.cpp", 0, llvm::MemoryBuffer::getMemBuffer("int i;")));
   auto Style2 = getStyle("file", "/b/test.cpp", "Mozilla", "", &FS);
   ASSERT_TRUE((bool)Style2);
   ASSERT_EQ(*Style2, getMozillaStyle());
+
+  // Test 2.2: no format on 'none' fallback style.
+  Style2 = getStyle("file", "/b/test.cpp", "none", "", &FS);
+  ASSERT_TRUE((bool)Style2);
+  ASSERT_EQ(*Style2, getNoStyle());
 
   // Test 3: format file in parent directory.
   ASSERT_TRUE(
