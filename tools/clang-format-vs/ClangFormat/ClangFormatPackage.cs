@@ -12,13 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-//TODO
-// DONE - Load extension on sln load
-// DONE - Look into whether we need to unregister/unload
-// - Only do format on save if .clang-format file (no fallback)
-// - Option for OnSave: Format Document (modified only)
-// - Format modified lines (+ OnSave)
-
 using EnvDTE;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Editor;
@@ -35,6 +28,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace LLVM.ClangFormat
 {
@@ -54,6 +48,13 @@ namespace LLVM.ClangFormat
         private bool sortIncludes = false;
         private string style = "file";
         private FormatOnSaveTypes formatOnSaveTypes = FormatOnSaveTypes.Disabled;
+
+        public class FormatOnSaveTypesConverter : TypeConverterUtils.EnumStringTypeConverter
+        {
+            public FormatOnSaveTypesConverter() : base(typeof(FormatOnSaveTypes))
+            {
+            }
+        }
 
         public class StyleConverter : TypeConverter
         {
@@ -189,8 +190,9 @@ namespace LLVM.ClangFormat
                      "\n" +
                      "Possible values:\n" +
                      "- Disabled: feature is disabled\n" +
-                     "- AllDocuments: format all modified documents\n" +
-                     "- CurrentDocument: format current document, if modified")]
+                     "- All Documents: format all modified documents\n" +
+                     "- Current Document: format current document, if modified")]
+        [TypeConverter(typeof(FormatOnSaveTypesConverter))]
         public FormatOnSaveTypes FormatOnSave
         {
             get { return formatOnSaveTypes; }
@@ -470,34 +472,55 @@ namespace LLVM.ClangFormat
             }
             edit.Apply();
         }
-
- 
-        //private string GetStyle()
-        //{
-        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-        //    return page.Style;
-        //}
-
-        //private string GetAssumeFilename()
-        //{
-        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-        //    return page.AssumeFilename;
-        //}
-
-        //private string GetFallbackStyle()
-        //{
-        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-        //    return page.FallbackStyle;
-        //}
-
-        //private bool GetSortIncludes()
-        //{
-        //    var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-        //    return page.SortIncludes;
-        //}
     }
 
+    public sealed class TypeConverterUtils
+    {
+        // Generic enum type converter that automatically converts enums <-> strings by
+        // injecting/removing spaces into camel-cased strings. You must derive your own
+        // type and pass the typeof(YourEnum) to the base constructor, rather than provide
+        // a generic type due to limitations of C# attributes.
+        public class EnumStringTypeConverter : EnumConverter
+        {
+            private Type enumType;
+            public EnumStringTypeConverter(Type enumType) : base(enumType)
+            {
+                this.enumType = enumType;
+            }
 
+            public override bool CanConvertFrom(ITypeDescriptorContext context, Type sourceType)
+            {
+                if (sourceType == typeof(string))
+                    return true;
+
+                return base.CanConvertFrom(context, sourceType);
+            }
+
+            public override object ConvertFrom(ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value)
+            {
+                string str = value as string;
+
+                if (str != null)
+                {
+                    str.Replace(" ", "");
+                    return Enum.Parse(enumType, str.Replace(" ", ""), false);
+                }
+
+                return base.ConvertFrom(context, culture, value);
+            }
+
+            public override object ConvertTo(ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value, Type destinationType)
+            {
+                if (destinationType == typeof(string))
+                {
+                    var enumString = ((Enum)value).ToString();
+                    return Regex.Replace(enumString, "([A-Z])", " $1").Trim();
+                }
+
+                return base.ConvertTo(context, culture, value, destinationType);
+            }
+        }
+    }
 
     internal sealed class VsixUtils
     {
