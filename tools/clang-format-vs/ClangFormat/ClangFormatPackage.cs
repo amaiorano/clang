@@ -43,6 +43,9 @@ namespace LLVM.ClangFormat
     [CLSCompliant(false), ComVisible(true)]
     public class OptionPageGrid : DialogPage
     {
+        private string fileExtensions =
+            ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
+            ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td;";
         private string assumeFilename = "";
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
@@ -93,6 +96,8 @@ namespace LLVM.ClangFormat
             }
         }
 
+
+
         [Category("LLVM/Clang")]
         [DisplayName("Style")]
         [Description("Coding style, currently supports:\n" +
@@ -138,6 +143,15 @@ namespace LLVM.ClangFormat
 
                 return value;
             }
+        }
+
+        [Category("LLVM/Clang")]
+        [DisplayName("File extensions")]
+        [Description("clang-format will be applied to files with these extensions")]
+        public string FileExtensions
+        {
+            get { return fileExtensions; }
+            set { fileExtensions = value; }
         }
 
         [Category("LLVM/Clang")]
@@ -334,10 +348,18 @@ namespace LLVM.ClangFormat
             RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, options, view);
         }
 
+        private bool FileHasExtension(string filePath, string fileExtensions)
+        {
+            return fileExtensions.ToLower().Split(';').Contains(Path.GetExtension(filePath).ToLower());
+        }
+
         private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, ClangFormatOptions options, IWpfTextView view)
         {
             try
             {
+                if (!FileHasExtension(filePath, options.fileExtensions))
+                    return;
+                
                 string replacements = RunClangFormat(text, offset, length, path, filePath, options);
                 ApplyClangFormatReplacements(replacements, view);
             }
@@ -360,6 +382,7 @@ namespace LLVM.ClangFormat
 
         struct ClangFormatOptions
         {
+            public string fileExtensions;
             public string style;
             public string fallbackStyle;
             public bool sortIncludes;
@@ -373,6 +396,7 @@ namespace LLVM.ClangFormat
 
             return new ClangFormatOptions
             {
+                fileExtensions = page.FileExtensions,
                 style = page.Style,
                 fallbackStyle = page.FallbackStyle,
                 sortIncludes = page.SortIncludes,
