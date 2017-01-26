@@ -32,7 +32,7 @@ using System.Text.RegularExpressions;
 
 namespace LLVM.ClangFormat
 {
-    public enum FormatOnSaveTypes
+    public enum FormatOnSaveMode
     {
         Disabled,
         AllDocuments,
@@ -50,11 +50,11 @@ namespace LLVM.ClangFormat
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
         private string style = "file";
-        private FormatOnSaveTypes formatOnSaveTypes = FormatOnSaveTypes.Disabled;
+        private FormatOnSaveMode formatOnSaveMode = FormatOnSaveMode.Disabled;
 
-        public class FormatOnSaveTypesConverter : TypeConverterUtils.EnumStringTypeConverter
+        public class FormatOnSaveModeConverter : TypeConverterUtils.EnumStringTypeConverter
         {
-            public FormatOnSaveTypesConverter() : base(typeof(FormatOnSaveTypes))
+            public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
             {
             }
         }
@@ -206,11 +206,11 @@ namespace LLVM.ClangFormat
                      "- Disabled: feature is disabled\n" +
                      "- All Documents: format all modified documents\n" +
                      "- Current Document: format current document, if modified")]
-        [TypeConverter(typeof(FormatOnSaveTypesConverter))]
-        public FormatOnSaveTypes FormatOnSave
+        [TypeConverter(typeof(FormatOnSaveModeConverter))]
+        public FormatOnSaveMode FormatOnSaveMode
         {
-            get { return formatOnSaveTypes; }
-            set { formatOnSaveTypes = value; }
+            get { return formatOnSaveMode; }
+            set { formatOnSaveMode = value; }
         }
     }
 
@@ -273,10 +273,10 @@ namespace LLVM.ClangFormat
         {
             switch (GetUserOptions().formatOnSave)
             {
-                case FormatOnSaveTypes.Disabled:
+                case FormatOnSaveMode.Disabled:
                     return;
 
-                case FormatOnSaveTypes.CurrentDocument:
+                case FormatOnSaveMode.CurrentDocument:
                     IWpfTextView view = VsixUtils.GetCurrentView();
                     if (view == null)
                         // We're not in a text view.
@@ -286,7 +286,7 @@ namespace LLVM.ClangFormat
                         return;
                     break;
 
-                case FormatOnSaveTypes.AllDocuments:
+                case FormatOnSaveMode.AllDocuments:
                     break;
             }
 
@@ -301,7 +301,7 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Runs clang-format on the current selection
         /// </summary>
-        private void FormatSelection(ClangFormatOptions options)
+        private void FormatSelection(UserOptions options)
         {
             IWpfTextView view = VsixUtils.GetCurrentView();
             if (view == null)
@@ -325,17 +325,17 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Runs clang-format on the current document
         /// </summary>
-        private void FormatDocument(ClangFormatOptions options)
+        private void FormatDocument(UserOptions options)
         {
             FormatView(VsixUtils.GetCurrentView(), options);
         }
 
-        private void FormatDocument(Document document, ClangFormatOptions options)
+        private void FormatDocument(Document document, UserOptions options)
         {
             FormatView(VsixUtils.GetDocumentView(document), options);
         }
 
-        private void FormatView(IWpfTextView view, ClangFormatOptions options)
+        private void FormatView(IWpfTextView view, UserOptions options)
         {
             if (view == null)
                 // We're not in a text view.
@@ -353,7 +353,7 @@ namespace LLVM.ClangFormat
             return fileExtensions.ToLower().Split(';').Contains(Path.GetExtension(filePath).ToLower());
         }
 
-        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, ClangFormatOptions options, IWpfTextView view)
+        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, UserOptions options, IWpfTextView view)
         {
             try
             {
@@ -380,28 +380,28 @@ namespace LLVM.ClangFormat
             }
         }
 
-        struct ClangFormatOptions
+        struct UserOptions
         {
             public string fileExtensions;
             public string style;
             public string fallbackStyle;
             public bool sortIncludes;
             public string assumeFilename;
-            public FormatOnSaveTypes formatOnSave;
+            public FormatOnSaveMode formatOnSave;
         }
 
-        ClangFormatOptions GetUserOptions()
+        UserOptions GetUserOptions()
         {
             var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
 
-            return new ClangFormatOptions
+            return new UserOptions
             {
                 fileExtensions = page.FileExtensions,
                 style = page.Style,
                 fallbackStyle = page.FallbackStyle,
                 sortIncludes = page.SortIncludes,
                 assumeFilename = page.AssumeFilename,
-                formatOnSave = page.FormatOnSave
+                formatOnSave = page.FormatOnSaveMode
             };
         }
 
@@ -410,7 +410,7 @@ namespace LLVM.ClangFormat
         /// 
         /// Formats the text range starting at offset of the given length.
         /// </summary>
-        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, ClangFormatOptions options)
+        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, UserOptions options)
         {
             string vsixPath = Path.GetDirectoryName(
                 typeof(ClangFormatPackage).Assembly.Location);
