@@ -13,13 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 using EnvDTE;
-using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.Editor;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
-using Microsoft.VisualStudio.TextManager.Interop;
 using System;
 using System.Collections;
 using System.ComponentModel;
@@ -28,7 +25,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace LLVM.ClangFormat
 {
@@ -401,7 +397,6 @@ namespace LLVM.ClangFormat
             }
         }
 
-
         /// <summary>
         /// Runs the given text through clang-format and returns the replacements as XML.
         /// 
@@ -492,208 +487,6 @@ namespace LLVM.ClangFormat
                 edit.Replace(span, replacement.Value);
             }
             edit.Apply();
-        }
-    }
-
-    public sealed class TypeConverterUtils
-    {
-        // Generic enum type converter that automatically converts enums <-> strings by
-        // injecting/removing spaces into camel-cased strings. You must derive your own
-        // type and pass the typeof(YourEnum) to the base constructor, rather than provide
-        // a generic type due to limitations of C# attributes.
-        public class EnumStringTypeConverter : EnumConverter
-        {
-            private Type enumType;
-            public EnumStringTypeConverter(Type enumType) : base(enumType)
-            {
-                this.enumType = enumType;
-            }
-
-            public override bool CanConvertFrom(ITypeDescriptorContext context, Type sourceType)
-            {
-                if (sourceType == typeof(string))
-                    return true;
-
-                return base.CanConvertFrom(context, sourceType);
-            }
-
-            public override object ConvertFrom(ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value)
-            {
-                string str = value as string;
-
-                if (str != null)
-                {
-                    str.Replace(" ", "");
-                    return Enum.Parse(enumType, str.Replace(" ", ""), false);
-                }
-
-                return base.ConvertFrom(context, culture, value);
-            }
-
-            public override object ConvertTo(ITypeDescriptorContext context, System.Globalization.CultureInfo culture, object value, Type destinationType)
-            {
-                if (destinationType == typeof(string))
-                {
-                    var enumString = ((Enum)value).ToString();
-                    return Regex.Replace(enumString, "([A-Z])", " $1").Trim();
-                }
-
-                return base.ConvertTo(context, culture, value, destinationType);
-            }
-        }
-    }
-
-    internal sealed class VsixUtils
-    {
-        /// <summary>
-        /// Returns the currently active view if it is a IWpfTextView.
-        /// </summary>
-        public static IWpfTextView GetCurrentView()
-        {
-            // The SVsTextManager is a service through which we can get the active view.
-            var textManager = (IVsTextManager)Package.GetGlobalService(typeof(SVsTextManager));
-            IVsTextView textView;
-            textManager.GetActiveView(1, null, out textView);
-
-            // Now we have the active view as IVsTextView, but the text interfaces we need
-            // are in the IWpfTextView.
-            return VsToWpfTextView(textView);
-        }
-
-        public static bool IsDocumentDirty(Document document)
-        {
-            var textView = GetDocumentView(document);
-            var textDocument = GetTextDocument(textView);
-            return textDocument?.IsDirty == true;
-        }
-
-        public static IWpfTextView GetDocumentView(Document document)
-        {
-            var textView = GetVsTextViewFrompPath(document.FullName);
-            return VsToWpfTextView(textView);
-        }
-
-        public static IWpfTextView VsToWpfTextView(IVsTextView textView)
-        {
-            var userData = (IVsUserData)textView;
-            if (userData == null)
-                return null;
-            Guid guidWpfViewHost = DefGuidList.guidIWpfTextViewHost;
-            object host;
-            userData.GetData(ref guidWpfViewHost, out host);
-            return ((IWpfTextViewHost)host).TextView;
-        }
-
-        public static IVsTextView GetVsTextViewFrompPath(string filePath)
-        {
-            // From http://stackoverflow.com/a/2427368/4039972
-            var dte2 = (EnvDTE80.DTE2)Package.GetGlobalService(typeof(SDTE));
-            var sp = (Microsoft.VisualStudio.OLE.Interop.IServiceProvider)dte2;
-            var serviceProvider = new Microsoft.VisualStudio.Shell.ServiceProvider(sp);
-
-            IVsUIHierarchy uiHierarchy;
-            uint itemID;
-            IVsWindowFrame windowFrame;
-            if (VsShellUtilities.IsDocumentOpen(serviceProvider, filePath, Guid.Empty,
-                out uiHierarchy, out itemID, out windowFrame))
-            {
-                // Get the IVsTextView from the windowFrame.
-                return VsShellUtilities.GetTextView(windowFrame);
-            }
-            return null;
-        }
-
-        public static ITextDocument GetTextDocument(IWpfTextView view)
-        {
-            ITextDocument document;
-            if (view != null && view.TextBuffer.Properties.TryGetProperty(typeof(ITextDocument), out document))
-                return document;
-            return null;
-        }
-
-        public static string GetDocumentParent(IWpfTextView view)
-        {
-            ITextDocument document = GetTextDocument(view);
-            if (document != null)
-            {
-                return Directory.GetParent(document.FilePath).ToString();
-            }
-            return null;
-        }
-
-        public static string GetDocumentPath(IWpfTextView view)
-        {
-            return GetTextDocument(view)?.FilePath;
-        }        
-    }
-
-    internal sealed class RunningDocTableEventsDispatcher : IVsRunningDocTableEvents3
-    {
-        public delegate void OnBeforeSaveHander(object sender, Document document);
-        public event OnBeforeSaveHander BeforeSave;
-
-        private RunningDocumentTable _runningDocumentTable;
-        private DTE _dte;
-        public RunningDocTableEventsDispatcher(Package package)
-        {
-            _runningDocumentTable = new RunningDocumentTable(package);
-            _runningDocumentTable.Advise(this);
-
-            _dte = (DTE)Package.GetGlobalService(typeof(DTE));
-        }
-
-        public int OnAfterAttributeChange(uint docCookie, uint grfAttribs)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnAfterAttributeChangeEx(uint docCookie, uint grfAttribs, IVsHierarchy pHierOld, uint itemidOld, string pszMkDocumentOld, IVsHierarchy pHierNew, uint itemidNew, string pszMkDocumentNew)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnAfterDocumentWindowHide(uint docCookie, IVsWindowFrame pFrame)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnAfterFirstDocumentLock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnAfterSave(uint docCookie)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnBeforeDocumentWindowShow(uint docCookie, int fFirstShow, IVsWindowFrame pFrame)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnBeforeLastDocumentUnlock(uint docCookie, uint dwRDTLockType, uint dwReadLocksRemaining, uint dwEditLocksRemaining)
-        {
-            return VSConstants.S_OK;
-        }
-
-        public int OnBeforeSave(uint docCookie)
-        {
-            if (BeforeSave != null)
-            {
-                var document = FindDocumentByCookie(docCookie);
-                if (document != null) // Not sure why this happens sometimes
-                {
-                    BeforeSave(this, FindDocumentByCookie(docCookie));
-                }
-            }
-            return VSConstants.S_OK;
-        }
-
-        private Document FindDocumentByCookie(uint docCookie)
-        {
-            var documentInfo = _runningDocumentTable.GetDocumentInfo(docCookie);
-            return _dte.Documents.Cast<Document>().FirstOrDefault(doc => doc.FullName == documentInfo.Moniker);
         }
     }
 }
