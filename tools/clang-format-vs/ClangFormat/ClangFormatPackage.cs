@@ -34,7 +34,6 @@ namespace LLVM.ClangFormat
 {
     public enum FormatOnSaveMode
     {
-        Disabled,
         AllDocuments,
         CurrentDocument
     }
@@ -43,20 +42,28 @@ namespace LLVM.ClangFormat
     [CLSCompliant(false), ComVisible(true)]
     public class OptionPageGrid : DialogPage
     {
-        private string fileExtensions =
-            ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
-            ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td;";
         private string assumeFilename = "";
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
         private string style = "file";
-        private FormatOnSaveMode formatOnSaveMode = FormatOnSaveMode.Disabled;
+        private bool formatOnSaveEnabled = false;
+        private FormatOnSaveMode formatOnSaveMode = FormatOnSaveMode.AllDocuments;
+        private string formatOnSaveFileExtensions =
+            ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
+            ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td";
 
         public class FormatOnSaveModeConverter : TypeConverterUtils.EnumStringTypeConverter
         {
             public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
             {
             }
+        }
+
+        public OptionPageGrid Clone()
+        {
+            // Use MemberwiseClone to copy value types
+            var clone = (OptionPageGrid)MemberwiseClone();
+            return clone;
         }
 
         public class StyleConverter : TypeConverter
@@ -96,9 +103,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-
-
-        [Category("LLVM/Clang")]
+        [Category("Format Options")]
         [DisplayName("Style")]
         [Description("Coding style, currently supports:\n" +
                      "  - Predefined styles ('LLVM', 'Google', 'Chromium', 'Mozilla', 'WebKit').\n" +
@@ -145,16 +150,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        [Category("LLVM/Clang")]
-        [DisplayName("File extensions")]
-        [Description("clang-format will be applied to files with these extensions")]
-        public string FileExtensions
-        {
-            get { return fileExtensions; }
-            set { fileExtensions = value; }
-        }
-
-        [Category("LLVM/Clang")]
+        [Category("Format Options")]
         [DisplayName("Assume Filename")]
         [Description("When reading from stdin, clang-format assumes this " +
                      "filename to look for a style config file (with 'file' style) " +
@@ -175,7 +171,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        [Category("LLVM/Clang")]
+        [Category("Format Options")]
         [DisplayName("Fallback Style")]
         [Description("The name of the predefined style used as a fallback in case clang-format " +
                      "is invoked with 'file' style, but can not find the configuration file.\n" +
@@ -187,7 +183,7 @@ namespace LLVM.ClangFormat
             set { fallbackStyle = value; }
         }
 
-        [Category("LLVM/Clang")]
+        [Category("Format Options")]
         [DisplayName("Sort includes")]
         [Description("Sort touched include lines.\n\n" +
                      "See also: http://clang.llvm.org/docs/ClangFormat.html.")]
@@ -197,13 +193,20 @@ namespace LLVM.ClangFormat
             set { sortIncludes = value; }
         }
 
-        [Category("LLVM/Clang")]
-        [DisplayName("Format on Save")]
-        [Description("Runs clang-format upon saving.\n" +
-                     "Will only format if Style is found (ignores Fallback Style)\n" +
-                     "\n" +
-                     "Possible values:\n" +
-                     "- Disabled: feature is disabled\n" +
+        [Category("Format On Save")]
+        [DisplayName("Enable")]
+        [Description("Enable running clang-format when modified files are saved. " +
+                     "Will only format if Style is found (ignores Fallback Style)."
+            )]
+        public bool FormatOnSaveEnabled
+        {
+            get { return formatOnSaveEnabled; }
+            set { formatOnSaveEnabled = value; }
+        }
+
+        [Category("Format On Save")]
+        [DisplayName("Mode")]
+        [Description("How to run clang-format upon saving:\n" +
                      "- All Documents: format all modified documents\n" +
                      "- Current Document: format current document, if modified")]
         [TypeConverter(typeof(FormatOnSaveModeConverter))]
@@ -211,6 +214,16 @@ namespace LLVM.ClangFormat
         {
             get { return formatOnSaveMode; }
             set { formatOnSaveMode = value; }
+        }
+
+        [Category("Format On Save")]
+        [DisplayName("File extensions")]
+        [Description("When formatting on save, clang-format will be applied only to " +
+                     "files with these extensions.")]
+        public string FormatOnSaveFileExtensions
+        {
+            get { return formatOnSaveFileExtensions; }
+            set { formatOnSaveFileExtensions = value; }
         }
     }
 
@@ -251,6 +264,11 @@ namespace LLVM.ClangFormat
         }
         #endregion
 
+        OptionPageGrid GetUserOptions()
+        {
+            return (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
+        }
+
         private void MenuItemCallback(object sender, EventArgs args)
         {
             var mc = sender as System.ComponentModel.Design.MenuCommand;
@@ -269,13 +287,24 @@ namespace LLVM.ClangFormat
             }
         }
 
+        private static bool FileHasExtension(string filePath, string fileExtensions)
+        {
+            var extensions = fileExtensions.ToLower().Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            return extensions.Contains(Path.GetExtension(filePath).ToLower());
+        }
+
         private void OnBeforeSave(object sender, Document document)
         {
-            switch (GetUserOptions().formatOnSave)
-            {
-                case FormatOnSaveMode.Disabled:
-                    return;
+            var options = GetUserOptions();
 
+            if (!options.FormatOnSaveEnabled)
+                return;
+
+            if (!FileHasExtension(document.FullName, options.FormatOnSaveFileExtensions))
+                return;
+
+            switch (options.FormatOnSaveMode)
+            {
                 case FormatOnSaveMode.CurrentDocument:
                     IWpfTextView view = VsixUtils.GetCurrentView();
                     if (view == null)
@@ -292,16 +321,16 @@ namespace LLVM.ClangFormat
 
             if (VsixUtils.IsDocumentDirty(document))
             {
-                var options = GetUserOptions();
-                options.fallbackStyle = "none";
-                FormatDocument(document, options);
+                var optionsWithNoFallbackStyle = GetUserOptions().Clone();
+                optionsWithNoFallbackStyle.FallbackStyle = "none";
+                FormatDocument(document, optionsWithNoFallbackStyle);
             }
         }
 
         /// <summary>
         /// Runs clang-format on the current selection
         /// </summary>
-        private void FormatSelection(UserOptions options)
+        private void FormatSelection(OptionPageGrid options)
         {
             IWpfTextView view = VsixUtils.GetCurrentView();
             if (view == null)
@@ -325,17 +354,17 @@ namespace LLVM.ClangFormat
         /// <summary>
         /// Runs clang-format on the current document
         /// </summary>
-        private void FormatDocument(UserOptions options)
+        private void FormatDocument(OptionPageGrid options)
         {
             FormatView(VsixUtils.GetCurrentView(), options);
         }
 
-        private void FormatDocument(Document document, UserOptions options)
+        private void FormatDocument(Document document, OptionPageGrid options)
         {
             FormatView(VsixUtils.GetDocumentView(document), options);
         }
 
-        private void FormatView(IWpfTextView view, UserOptions options)
+        private void FormatView(IWpfTextView view, OptionPageGrid options)
         {
             if (view == null)
                 // We're not in a text view.
@@ -348,18 +377,10 @@ namespace LLVM.ClangFormat
             RunClangFormatAndApplyReplacements(text, 0, text.Length, path, filePath, options, view);
         }
 
-        private bool FileHasExtension(string filePath, string fileExtensions)
-        {
-            return fileExtensions.ToLower().Split(';').Contains(Path.GetExtension(filePath).ToLower());
-        }
-
-        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, UserOptions options, IWpfTextView view)
+        private void RunClangFormatAndApplyReplacements(string text, int offset, int length, string path, string filePath, OptionPageGrid options, IWpfTextView view)
         {
             try
             {
-                if (!FileHasExtension(filePath, options.fileExtensions))
-                    return;
-                
                 string replacements = RunClangFormat(text, offset, length, path, filePath, options);
                 ApplyClangFormatReplacements(replacements, view);
             }
@@ -380,37 +401,13 @@ namespace LLVM.ClangFormat
             }
         }
 
-        struct UserOptions
-        {
-            public string fileExtensions;
-            public string style;
-            public string fallbackStyle;
-            public bool sortIncludes;
-            public string assumeFilename;
-            public FormatOnSaveMode formatOnSave;
-        }
-
-        UserOptions GetUserOptions()
-        {
-            var page = (OptionPageGrid)GetDialogPage(typeof(OptionPageGrid));
-
-            return new UserOptions
-            {
-                fileExtensions = page.FileExtensions,
-                style = page.Style,
-                fallbackStyle = page.FallbackStyle,
-                sortIncludes = page.SortIncludes,
-                assumeFilename = page.AssumeFilename,
-                formatOnSave = page.FormatOnSaveMode
-            };
-        }
 
         /// <summary>
         /// Runs the given text through clang-format and returns the replacements as XML.
         /// 
         /// Formats the text range starting at offset of the given length.
         /// </summary>
-        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, UserOptions options)
+        private static string RunClangFormat(string text, int offset, int length, string path, string filePath, OptionPageGrid options)
         {
             string vsixPath = Path.GetDirectoryName(
                 typeof(ClangFormatPackage).Assembly.Location);
@@ -420,16 +417,16 @@ namespace LLVM.ClangFormat
             process.StartInfo.FileName = vsixPath + "\\clang-format.exe";
             // Poor man's escaping - this will not work when quotes are already escaped
             // in the input (but we don't need more).
-            string style = options.style.Replace("\"", "\\\"");
-            string fallbackStyle = options.fallbackStyle.Replace("\"", "\\\"");
+            string style = options.Style.Replace("\"", "\\\"");
+            string fallbackStyle = options.FallbackStyle.Replace("\"", "\\\"");
             process.StartInfo.Arguments = " -offset " + offset +
                                           " -length " + length +
                                           " -output-replacements-xml " +
                                           " -style \"" + style + "\"" +
                                           " -fallback-style \"" + fallbackStyle + "\"";
-            if (options.sortIncludes)
+            if (options.SortIncludes)
               process.StartInfo.Arguments += " -sort-includes ";
-            string assumeFilename = options.assumeFilename;
+            string assumeFilename = options.AssumeFilename;
             if (string.IsNullOrEmpty(assumeFilename))
                 assumeFilename = filePath;
             if (!string.IsNullOrEmpty(assumeFilename))
