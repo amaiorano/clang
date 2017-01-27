@@ -48,13 +48,6 @@ namespace LLVM.ClangFormat
             ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
             ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td";
 
-        public class FormatOnSaveModeConverter : TypeConverterUtils.EnumStringTypeConverter
-        {
-            public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
-            {
-            }
-        }
-
         public OptionPageGrid Clone()
         {
             // Use MemberwiseClone to copy value types
@@ -96,6 +89,13 @@ namespace LLVM.ClangFormat
                     return base.ConvertFrom(context, culture, value);
 
                 return value;
+            }
+        }
+
+        public class FormatOnSaveModeConverter : TypeConverterUtils.EnumStringTypeConverter
+        {
+            public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
+            {
             }
         }
 
