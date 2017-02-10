@@ -10,7 +10,7 @@ using System.IO;
 
 namespace LLVM.ClangFormat
 {
-    internal sealed class VsixUtils
+    internal sealed class Vsix
     {
         /// <summary>
         /// Returns the currently active view if it is a IWpfTextView.

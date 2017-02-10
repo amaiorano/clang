@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace LLVM.ClangFormat
 {
-    public sealed class TypeConverterUtils
+    public sealed class TypeConversion
     {
         // Generic enum type converter that automatically converts enums <-> strings by
         // injecting/removing spaces into camel-cased strings. You must derive your own

@@ -92,7 +92,7 @@ namespace LLVM.ClangFormat
             }
         }
 
-        public class FormatOnSaveModeConverter : TypeConverterUtils.EnumStringTypeConverter
+        public class FormatOnSaveModeConverter : TypeConversion.EnumStringTypeConverter
         {
             public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
             {
@@ -302,11 +302,11 @@ namespace LLVM.ClangFormat
             switch (options.FormatOnSaveMode)
             {
                 case FormatOnSaveMode.CurrentDocument:
-                    IWpfTextView view = VsixUtils.GetCurrentView();
+                    IWpfTextView view = Vsix.GetCurrentView();
                     if (view == null)
                         // We're not in a text view.
                         return;
-                    if (VsixUtils.GetDocumentView(document) != view)
+                    if (Vsix.GetDocumentView(document) != view)
                         // Not the current document
                         return;
                     break;
@@ -315,7 +315,7 @@ namespace LLVM.ClangFormat
                     break;
             }
 
-            if (VsixUtils.IsDocumentDirty(document))
+            if (Vsix.IsDocumentDirty(document))
             {
                 var optionsWithNoFallbackStyle = GetUserOptions().Clone();
                 optionsWithNoFallbackStyle.FallbackStyle = "none";
@@ -328,7 +328,7 @@ namespace LLVM.ClangFormat
         /// </summary>
         private void FormatSelection(OptionPageGrid options)
         {
-            IWpfTextView view = VsixUtils.GetCurrentView();
+            IWpfTextView view = Vsix.GetCurrentView();
             if (view == null)
                 // We're not in a text view.
                 return;
@@ -341,8 +341,8 @@ namespace LLVM.ClangFormat
             // of the file.
             if (start >= text.Length && text.Length > 0)
                 start = text.Length - 1;
-            string path = VsixUtils.GetDocumentParent(view);
-            string filePath = VsixUtils.GetDocumentPath(view);
+            string path = Vsix.GetDocumentParent(view);
+            string filePath = Vsix.GetDocumentPath(view);
 
             RunClangFormatAndApplyReplacements(text, start, length, path, filePath, options, view);
         }
@@ -352,12 +352,12 @@ namespace LLVM.ClangFormat
         /// </summary>
         private void FormatDocument(OptionPageGrid options)
         {
-            FormatView(VsixUtils.GetCurrentView(), options);
+            FormatView(Vsix.GetCurrentView(), options);
         }
 
         private void FormatDocument(Document document, OptionPageGrid options)
         {
-            FormatView(VsixUtils.GetDocumentView(document), options);
+            FormatView(Vsix.GetDocumentView(document), options);
         }
 
         private void FormatView(IWpfTextView view, OptionPageGrid options)
@@ -366,7 +366,7 @@ namespace LLVM.ClangFormat
                 // We're not in a text view.
                 return;
 
-            string filePath = VsixUtils.GetDocumentPath(view);
+            string filePath = Vsix.GetDocumentPath(view);
             var path = Path.GetDirectoryName(filePath);
             string text = view.TextBuffer.CurrentSnapshot.GetText();
 
