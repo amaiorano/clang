@@ -28,12 +28,6 @@ using System.Linq;
 
 namespace LLVM.ClangFormat
 {
-    public enum FormatOnSaveMode
-    {
-        AllDocuments,
-        CurrentDocument
-    }
-
     [ClassInterface(ClassInterfaceType.AutoDual)]
     [CLSCompliant(false), ComVisible(true)]
     public class OptionPageGrid : DialogPage
@@ -43,7 +37,6 @@ namespace LLVM.ClangFormat
         private bool sortIncludes = false;
         private string style = "file";
         private bool formatOnSaveEnabled = false;
-        private FormatOnSaveMode formatOnSaveMode = FormatOnSaveMode.AllDocuments;
         private string formatOnSaveFileExtensions =
             ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
             ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td";
@@ -89,13 +82,6 @@ namespace LLVM.ClangFormat
                     return base.ConvertFrom(context, culture, value);
 
                 return value;
-            }
-        }
-
-        public class FormatOnSaveModeConverter : TypeConversion.EnumStringTypeConverter
-        {
-            public FormatOnSaveModeConverter() : base(typeof(FormatOnSaveMode))
-            {
             }
         }
 
@@ -201,18 +187,6 @@ namespace LLVM.ClangFormat
         }
 
         [Category("Format On Save")]
-        [DisplayName("Mode")]
-        [Description("How to run clang-format upon saving:\n" +
-                     "- All Documents: format all modified documents\n" +
-                     "- Current Document: format current document, if modified")]
-        [TypeConverter(typeof(FormatOnSaveModeConverter))]
-        public FormatOnSaveMode FormatOnSaveMode
-        {
-            get { return formatOnSaveMode; }
-            set { formatOnSaveMode = value; }
-        }
-
-        [Category("Format On Save")]
         [DisplayName("File extensions")]
         [Description("When formatting on save, clang-format will be applied only to " +
                      "files with these extensions.")]
@@ -298,22 +272,6 @@ namespace LLVM.ClangFormat
 
             if (!FileHasExtension(document.FullName, options.FormatOnSaveFileExtensions))
                 return;
-
-            switch (options.FormatOnSaveMode)
-            {
-                case FormatOnSaveMode.CurrentDocument:
-                    IWpfTextView view = Vsix.GetCurrentView();
-                    if (view == null)
-                        // We're not in a text view.
-                        return;
-                    if (Vsix.GetDocumentView(document) != view)
-                        // Not the current document
-                        return;
-                    break;
-
-                case FormatOnSaveMode.AllDocuments:
-                    break;
-            }
 
             if (Vsix.IsDocumentDirty(document))
             {
