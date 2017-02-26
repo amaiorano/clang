@@ -36,14 +36,14 @@ namespace LLVM.ClangFormat
         private string fallbackStyle = "LLVM";
         private bool sortIncludes = false;
         private string style = "file";
-        private bool formatOnSaveEnabled = false;
+        private bool formatOnSave = false;
         private string formatOnSaveFileExtensions =
             ".c;.cpp;.cxx;.cc;.tli;.tlh;.h;.hh;.hpp;.hxx;.hh;.inl" +
             ".java;.js;.ts;.m;.mm;.proto;.protodevel;.td";
 
         public OptionPageGrid Clone()
         {
-            // Use MemberwiseClone to copy value types
+            // Use MemberwiseClone to copy value types.
             var clone = (OptionPageGrid)MemberwiseClone();
             return clone;
         }
@@ -180,10 +180,10 @@ namespace LLVM.ClangFormat
         [Description("Enable running clang-format when modified files are saved. " +
                      "Will only format if Style is found (ignores Fallback Style)."
             )]
-        public bool FormatOnSaveEnabled
+        public bool FormatOnSave
         {
-            get { return formatOnSaveEnabled; }
-            set { formatOnSaveEnabled = value; }
+            get { return formatOnSave; }
+            set { formatOnSave = value; }
         }
 
         [Category("Format On Save")]
@@ -267,18 +267,18 @@ namespace LLVM.ClangFormat
         {
             var options = GetUserOptions();
 
-            if (!options.FormatOnSaveEnabled)
+            if (!options.FormatOnSave)
                 return;
 
             if (!FileHasExtension(document.FullName, options.FormatOnSaveFileExtensions))
                 return;
 
-            if (Vsix.IsDocumentDirty(document))
-            {
-                var optionsWithNoFallbackStyle = GetUserOptions().Clone();
-                optionsWithNoFallbackStyle.FallbackStyle = "none";
-                FormatDocument(document, optionsWithNoFallbackStyle);
-            }
+            if (!Vsix.IsDocumentDirty(document))
+                return;
+
+            var optionsWithNoFallbackStyle = GetUserOptions().Clone();
+            optionsWithNoFallbackStyle.FallbackStyle = "none";
+            FormatDocument(document, optionsWithNoFallbackStyle);
         }
 
         /// <summary>
